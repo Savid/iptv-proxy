@@ -1,0 +1,49 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="" tvg-name="US: ESPN" tvg-logo="" group-title="US Sports",US: ESPN
+https://somewhere.co/abc123/efg890/200163456
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 502" tvg-logo="" group-title="Australia",AU: FOX SPORTS 502
+https://somewhere.co/abc123/efg890/600002905
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 504" tvg-logo="" group-title="Australia",AU: FOX SPORTS 504
+https://somewhere.co/abc123/efg890/600002907
+#EXTINF:-1 tvg-id="" tvg-name="AUS: FOX LEAGUE" tvg-logo="" group-title="Australia",AUS: FOX LEAGUE
+https://somewhere.co/abc123/efg890/600004041
+#EXTINF:-1 tvg-id="" tvg-name="AU: ESPN 1 FHD" tvg-logo="" group-title="Australia",AU: ESPN 1 FHD
+https://somewhere.co/abc123/efg890/600004989
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 506" tvg-logo="" group-title="Australia",AU: FOX SPORTS 506
+https://somewhere.co/abc123/efg890/600002909
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 503" tvg-logo="" group-title="Australia",AU: FOX SPORTS 503
+https://somewhere.co/abc123/efg890/600002906
+#EXTINF:-1 tvg-id="" tvg-name="AU: ESPN 2 FHD" tvg-logo="" group-title="Australia",AU: ESPN 2 FHD
+https://somewhere.co/abc123/efg890/600004990
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 501" tvg-logo="" group-title="Australia",AU: FOX SPORTS 501
+https://somewhere.co/abc123/efg890/600002904
+#EXTINF:-1 tvg-id="" tvg-name="AUS: FOX CRICKET" tvg-logo="" group-title="Australia",AUS: FOX CRICKET
+https://somewhere.co/abc123/efg890/600004040
+#EXTINF:-1 tvg-id="" tvg-name="AU: beIN Sports 1 FHD" tvg-logo="" group-title="Australia",AU: beIN Sports 1 FHD
+https://somewhere.co/abc123/efg890/600004986
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 505" tvg-logo="" group-title="Australia",AU: FOX SPORTS 505
+https://somewhere.co/abc123/efg890/600002908
+#EXTINF:-1 tvg-id="" tvg-name="AU: Fox Cricket FHD" tvg-logo="" group-title="Australia",AU: Fox Cricket FHD
+https://somewhere.co/abc123/efg890/600004991
+#EXTINF:-1 tvg-id="" tvg-name="AU: beIN Sports 2 FHD" tvg-logo="" group-title="Australia",AU: beIN Sports 2 FHD
+https://somewhere.co/abc123/efg890/600004987
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 507" tvg-logo="" group-title="Australia",AU: FOX SPORTS 507
+https://somewhere.co/abc123/efg890/600002910
+#EXTINF:-1 tvg-id="" tvg-name="AUS: BEIN SPORTS 2" tvg-logo="" group-title="Australia",AUS: BEIN SPORTS 2
+https://somewhere.co/abc123/efg890/600004036
+#EXTINF:-1 tvg-id="" tvg-name="AU: beIN Sports 3 FHD" tvg-logo="" group-title="Australia",AU: beIN Sports 3 FHD
+https://somewhere.co/abc123/efg890/600004988
+#EXTINF:-1 tvg-id="" tvg-name="AUS: BEIN SPORTS 1" tvg-logo="" group-title="Australia",AUS: BEIN SPORTS 1
+https://somewhere.co/abc123/efg890/600004035
+#EXTINF:-1 tvg-id="" tvg-name="AUS: BEIN SPORTS 3" tvg-logo="" group-title="Australia",AUS: BEIN SPORTS 3
+https://somewhere.co/abc123/efg890/600004037
+#EXTINF:-1 tvg-id="" tvg-name="AU: Racing.com" tvg-logo="" group-title="Australia",AU: Racing.com
+https://somewhere.co/abc123/efg890/600004985
+#EXTINF:-1 tvg-id="" tvg-name="AU: FOX SPORTS 508" tvg-logo="" group-title="Australia",AU: FOX SPORTS 508
+https://somewhere.co/abc123/efg890/600010046
+#EXTINF:-1 tvg-id="" tvg-name="PH GMA Pinoy TV (D)" tvg-logo="" group-title="Philippines",PH GMA Pinoy TV (D)
+https://somewhere.co/abc123/efg890/10818
+#EXTINF:-1 tvg-id="" tvg-name="PH GMA News TV (D)" tvg-logo="" group-title="Philippines",PH GMA News TV (D)
+https://somewhere.co/abc123/efg890/10816
+#EXTINF:-1 tvg-id="" tvg-name="AU ABC News Sydney (D)" tvg-logo="" group-title="Australia",AU ABC News Sydney (D)
+https://somewhere.co/abc123/efg890/38801
