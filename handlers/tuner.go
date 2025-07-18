@@ -6,10 +6,10 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/internal/data"
+	"github.com/savid/iptv-proxy/internal/utils"
 )
 
 // DeviceXML represents the UPnP device description.
@@ -146,7 +146,7 @@ func LineupHandler(cfg *config.Config, store *data.Store) http.HandlerFunc {
 		lineup := make([]LineupItem, 0, len(channels))
 		for i, channel := range channels {
 			// Generate proxy URL for the stream
-			proxyURL := fmt.Sprintf("%s/stream/%s", cfg.BaseURL, url.QueryEscape(channel.URL))
+			proxyURL := fmt.Sprintf("%s/stream/%s", cfg.BaseURL, utils.EncodeURL(channel.URL))
 
 			lineup = append(lineup, LineupItem{
 				GuideNumber: fmt.Sprintf("%d", i+1),

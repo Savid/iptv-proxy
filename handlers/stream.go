@@ -55,8 +55,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// If we haven't written headers yet, we can send an error response
 		// This typically happens for validation errors before the stream starts
 		if errors.Is(err, proxy.ErrUnsupportedScheme) ||
-			errors.Is(err, proxy.ErrMissingHost) ||
-			errors.Is(err, proxy.ErrInternalAddress) {
+			errors.Is(err, proxy.ErrMissingHost) {
 			http.Error(w, "Bad Gateway", http.StatusBadGateway)
 			return
 		}

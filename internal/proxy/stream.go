@@ -16,8 +16,6 @@ var (
 	ErrUnsupportedScheme = errors.New("unsupported URL scheme")
 	// ErrMissingHost is returned when the URL has no host.
 	ErrMissingHost = errors.New("missing host in URL")
-	// ErrInternalAddress is returned when trying to proxy to internal addresses.
-	ErrInternalAddress = errors.New("cannot proxy to internal addresses")
 )
 
 // getHopHeaders returns HTTP headers that should not be forwarded when proxying.
@@ -57,9 +55,14 @@ func Stream(w http.ResponseWriter, r *http.Request, targetURL string) error {
 
 	copyHeaders(req.Header, r.Header)
 
-	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
+	// Only set User-Agent if client didn't provide one
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", "IPTV-Proxy/1.0")
+	}
+
+	// Only set Accept if client didn't provide one
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "*/*")
 	}
 
 	resp, err := httpClient.Do(req)
@@ -71,6 +74,17 @@ func Stream(w http.ResponseWriter, r *http.Request, targetURL string) error {
 	}()
 
 	copyHeaders(w.Header(), resp.Header)
+
+	// Only set default content type if upstream didn't provide one
+	if w.Header().Get("Content-Type") == "" {
+		// Default to video/mp2t for MPEG-TS streams which are common in IPTV
+		w.Header().Set("Content-Type", "video/mp2t")
+	}
+
+	// Remove content-length if present to allow streaming
+	// This is important for chunked transfer encoding
+	w.Header().Del("Content-Length")
+
 	w.WriteHeader(resp.StatusCode)
 
 	ctx := r.Context()
@@ -118,20 +132,6 @@ func validateURL(rawURL string) error {
 
 	if u.Host == "" {
 		return ErrMissingHost
-	}
-
-	host := strings.ToLower(u.Hostname())
-	if host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" ||
-		strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") ||
-		strings.HasPrefix(host, "172.16.") || strings.HasPrefix(host, "172.17.") ||
-		strings.HasPrefix(host, "172.18.") || strings.HasPrefix(host, "172.19.") ||
-		strings.HasPrefix(host, "172.20.") || strings.HasPrefix(host, "172.21.") ||
-		strings.HasPrefix(host, "172.22.") || strings.HasPrefix(host, "172.23.") ||
-		strings.HasPrefix(host, "172.24.") || strings.HasPrefix(host, "172.25.") ||
-		strings.HasPrefix(host, "172.26.") || strings.HasPrefix(host, "172.27.") ||
-		strings.HasPrefix(host, "172.28.") || strings.HasPrefix(host, "172.29.") ||
-		strings.HasPrefix(host, "172.30.") || strings.HasPrefix(host, "172.31.") {
-		return ErrInternalAddress
 	}
 
 	return nil

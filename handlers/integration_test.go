@@ -181,14 +181,14 @@ func TestStreamHandler(t *testing.T) {
 			wantStatus: http.StatusBadGateway,
 		},
 		{
-			name:       "localhost URL (blocked)",
+			name:       "localhost URL (connection refused)",
 			path:       "/stream/" + url.QueryEscape("http://localhost/stream"),
-			wantStatus: http.StatusBadGateway,
+			wantStatus: http.StatusOK, // Headers written before connection error
 		},
 		{
-			name:       "internal IP (blocked)",
-			path:       "/stream/" + url.QueryEscape("http://192.168.1.1/stream"),
-			wantStatus: http.StatusBadGateway,
+			name:       "internal IP (TLS certificate error)",
+			path:       "/stream/" + url.QueryEscape("https://192.168.1.1/stream"),
+			wantStatus: http.StatusOK, // Headers written before TLS error
 		},
 	}
 
