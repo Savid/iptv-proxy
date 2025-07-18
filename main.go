@@ -58,11 +58,14 @@ func main() {
 	go refresher.Start(ctx)
 
 	mux := http.NewServeMux()
-	setupRoutes(mux, store, logger)
+	setupRoutes(mux, cfg, store, logger)
+
+	// Apply logging middleware to the mux
+	handler := handlers.LoggingMiddleware(logger)(mux)
 
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      mux,
+		Addr:         fmt.Sprintf("%s:%d", cfg.BindAddr, cfg.Port),
+		Handler:      handler,
 		ReadTimeout:  120 * time.Second,
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -84,7 +87,10 @@ func main() {
 		}
 	}()
 
-	logger.WithField("port", cfg.Port).Info("Starting IPTV proxy server")
+	logger.WithFields(logrus.Fields{
+		"bind": cfg.BindAddr,
+		"port": cfg.Port,
+	}).Info("Starting IPTV proxy server")
 	logger.WithField("endpoint", fmt.Sprintf("%s/iptv.m3u", cfg.BaseURL)).Info("M3U endpoint")
 	logger.WithField("endpoint", fmt.Sprintf("%s/epg.xml", cfg.BaseURL)).Info("EPG endpoint")
 
@@ -97,7 +103,14 @@ func main() {
 	cancel()
 }
 
-func setupRoutes(mux *http.ServeMux, store *data.Store, logger *logrus.Logger) {
+func setupRoutes(mux *http.ServeMux, cfg *config.Config, store *data.Store, logger *logrus.Logger) {
+	// Tuner advertising routes
+	mux.HandleFunc("/", handlers.RootXMLHandler(cfg))
+	mux.HandleFunc("/discovery.json", handlers.DiscoveryHandler(cfg))
+	mux.HandleFunc("/discover.json", handlers.DiscoveryHandler(cfg)) // Plex compatibility
+	mux.HandleFunc("/lineup.json", handlers.LineupHandler(cfg, store))
+	mux.HandleFunc("/lineup_status.json", handlers.LineupStatusHandler())
+
 	m3uHandler := handlers.NewM3UHandler(store, logger)
 	epgHandler := handlers.NewEPGHandler(store, logger)
 	streamHandler := handlers.NewStreamHandler(logger)

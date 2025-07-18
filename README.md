@@ -27,6 +27,7 @@ go build -o iptv-proxy
   -m3u "http://example.com/playlist.m3u" \
   -epg "http://example.com/epg.xml" \
   -base "http://localhost:8080" \
+  -bind "0.0.0.0" \
   -port 8080 \
   -refresh-interval 30m
 ```
@@ -36,6 +37,7 @@ go build -o iptv-proxy
 - `-m3u` (required): URL of the M3U playlist
 - `-epg` (required): URL of the EPG XML file
 - `-base` (required): Base URL for rewritten stream URLs (e.g., http://localhost:8080)
+- `-bind`: IP address to bind the server to (default: 0.0.0.0)
 - `-port`: Port to listen on (default: 8080)
 - `-log-level`: Log level - debug, info, warn, error (default: info)
 - `-refresh-interval`: Interval between data refreshes (default: 30m)

@@ -29,9 +29,11 @@ type Config struct {
 	M3UURL          string
 	EPGURL          string
 	BaseURL         string
+	BindAddr        string
 	Port            int
 	LogLevel        string
 	RefreshInterval time.Duration
+	TunerCount      int
 }
 
 // New creates a new configuration instance by parsing command-line flags.
@@ -41,9 +43,11 @@ func New() (*Config, error) {
 	flag.StringVar(&cfg.M3UURL, "m3u", "", "URL of the M3U playlist (required)")
 	flag.StringVar(&cfg.EPGURL, "epg", "", "URL of the EPG XML file (required)")
 	flag.StringVar(&cfg.BaseURL, "base", "", "Base URL for rewritten stream URLs (e.g., http://localhost:8080) (required)")
+	flag.StringVar(&cfg.BindAddr, "bind", "0.0.0.0", "IP address to bind the server to")
 	flag.IntVar(&cfg.Port, "port", 8080, "Port to listen on")
 	flag.StringVar(&cfg.LogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	flag.DurationVar(&cfg.RefreshInterval, "refresh-interval", 30*time.Minute, "Interval between data refreshes")
+	flag.IntVar(&cfg.TunerCount, "tuner-count", 2, "Number of tuners to advertise")
 
 	flag.Parse()
 
