@@ -36,7 +36,14 @@ func CreateProfile(videoCodec, audioCodec, videoBitrate, audioBitrate string) ty
 	// Add common args
 	extraArgs := []string{
 		"-err_detect", "ignore_err",
-		"-fflags", "+genpts+discardcorrupt",
+		"-fflags", "+genpts+discardcorrupt+nobuffer",
+		"-analyzeduration", "10M",
+		"-probesize", "10M",
+		"-max_delay", "5000000",
+		"-reconnect", "1",
+		"-reconnect_at_eof", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "5",
 		"-f", "mpegts",
 		"-mpegts_copyts", "1",
 		"-avoid_negative_ts", "disabled",
