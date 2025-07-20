@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?><!DOCTYPE tv SYSTEM "xmltv.dtd">
+<tv generator-info-name="PIA">
+	<channel id="foxsports502.au">
+		<display-name>FOX SPORTS 502</display-name>
+		<icon src="https://logo.iptveditor.com/foxsports502.png" />
+	</channel>
+	<programme start="20250716230000 +0000" stop="20250717003000 +0000" start_timestamp="1752706800" stop_timestamp="1752712200" channel="foxsports502.au" >
+		<title>Tim Tszyu &amp; Manny Pacquiao</title>
+		<desc></desc>
+	</programme>
+	<programme start="20250717003000 +0000" stop="20250717013000 +0000" start_timestamp="1752712200" stop_timestamp="1752715800" channel="foxsports502.au" >
+		<title>NRL 360</title>
+		<desc>Braith Anasta &amp; Gorden Tallis set the agenda during 2025, with breaking news &amp; opinions. Plus journalists, players &amp; coaches with views on what&apos;s topical.</desc>
+	</programme>
+</tv>
