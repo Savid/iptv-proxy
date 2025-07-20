@@ -9,6 +9,7 @@ import (
 
 	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/internal/data"
+	"github.com/savid/iptv-proxy/internal/testchannels"
 	"github.com/savid/iptv-proxy/internal/utils"
 )
 
@@ -153,6 +154,19 @@ func LineupHandler(cfg *config.Config, store *data.Store) http.HandlerFunc {
 				GuideName:   channel.Name,
 				URL:         proxyURL,
 			})
+		}
+
+		// Add test channels if enabled
+		if cfg.EnableTestChannels {
+			startNumber := len(channels) + 1
+			for i, profile := range testchannels.TestProfiles {
+				testURL := fmt.Sprintf("%s/test/%d", cfg.BaseURL, i)
+				lineup = append(lineup, LineupItem{
+					GuideNumber: fmt.Sprintf("%d", startNumber+i),
+					GuideName:   fmt.Sprintf("Test: %s", profile.Name),
+					URL:         testURL,
+				})
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

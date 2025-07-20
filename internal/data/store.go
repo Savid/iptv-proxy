@@ -9,10 +9,11 @@ import (
 
 // Store provides thread-safe in-memory storage for M3U and EPG data.
 type Store struct {
-	mu       sync.RWMutex
-	m3uData  *M3UData
-	epgData  *EPGData
-	lastSync time.Time
+	mu                  sync.RWMutex
+	m3uData             *M3UData
+	epgData             *EPGData
+	lastSync            time.Time
+	testChannelsEnabled bool
 }
 
 // M3UData contains M3U playlist data and metadata.
@@ -98,4 +99,20 @@ func (s *Store) LastSync() time.Time {
 	defer s.mu.RUnlock()
 
 	return s.lastSync
+}
+
+// SetTestChannelsEnabled enables or disables test channels.
+func (s *Store) SetTestChannelsEnabled(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.testChannelsEnabled = enabled
+}
+
+// IsTestChannelsEnabled returns whether test channels are enabled.
+func (s *Store) IsTestChannelsEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.testChannelsEnabled
 }

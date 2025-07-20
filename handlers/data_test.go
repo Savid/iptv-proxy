@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/internal/data"
 	"github.com/sirupsen/logrus"
 )
@@ -16,7 +17,13 @@ func TestM3UHandlerNoData(t *testing.T) {
 	store := data.NewStore()
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
-	handler := NewM3UHandler(store, logger)
+
+	// Create test config
+	cfg := &config.Config{
+		BaseURL: "http://localhost:8080",
+	}
+
+	handler := NewM3UHandler(store, cfg, logger)
 
 	// Create test request
 	req := httptest.NewRequest("GET", "/iptv.m3u", nil)
@@ -42,7 +49,13 @@ func TestEPGHandlerNoData(t *testing.T) {
 	store := data.NewStore()
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
-	handler := NewEPGHandler(store, logger)
+
+	// Create test config
+	cfg := &config.Config{
+		BaseURL: "http://localhost:8080",
+	}
+
+	handler := NewEPGHandler(store, cfg, logger)
 
 	// Create test request
 	req := httptest.NewRequest("GET", "/epg.xml", nil)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -40,6 +41,7 @@ func main() {
 
 	// Create store and fetcher
 	store := data.NewStore()
+	store.SetTestChannelsEnabled(cfg.EnableTestChannels)
 	fetcher := data.NewFetcher(cfg, logger)
 
 	// Perform initial data fetch (blocking)
@@ -111,13 +113,40 @@ func setupRoutes(mux *http.ServeMux, cfg *config.Config, store *data.Store, logg
 	mux.HandleFunc("/lineup.json", handlers.LineupHandler(cfg, store))
 	mux.HandleFunc("/lineup_status.json", handlers.LineupStatusHandler())
 
-	m3uHandler := handlers.NewM3UHandler(store, logger)
-	epgHandler := handlers.NewEPGHandler(store, logger)
-	streamHandler := handlers.NewStreamHandler(logger)
+	m3uHandler := handlers.NewM3UHandler(store, cfg, logger)
+	epgHandler := handlers.NewEPGHandler(store, cfg, logger)
+
+	// Use transcoding handler when video or audio codec is not "copy"
+	if cfg.VideoCodec != "copy" || cfg.AudioCodec != "copy" {
+		// Create a standard logger wrapper for logrus
+		stdLogger := log.New(logger.Writer(), "", 0)
+		streamHandler, err := handlers.NewStreamV2Handler(cfg, stdLogger)
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to create transcoding stream handler")
+		}
+		logger.WithFields(logrus.Fields{
+			"video_codec": cfg.VideoCodec,
+			"audio_codec": cfg.AudioCodec,
+		}).Info("Using transcoding stream handler")
+		mux.Handle("/stream/", streamHandler)
+	} else {
+		streamHandler := handlers.NewStreamHandler(logger)
+		logger.Info("Using direct stream handler (no transcoding)")
+		mux.Handle("/stream/", streamHandler)
+	}
 
 	mux.Handle("/iptv.m3u", m3uHandler)
 	mux.Handle("/epg.xml", epgHandler)
-	mux.Handle("/stream/", streamHandler)
+
+	// Add test channel handlers if enabled
+	if cfg.EnableTestChannels {
+		mux.HandleFunc("/test/", handlers.TestChannelHandler)
+		mux.HandleFunc("/test-icon/", handlers.TestIconHandler)
+	}
+
+	// Debug endpoints for troubleshooting
+	mux.HandleFunc("/debug", handlers.DebugHandler)
+	mux.HandleFunc("/plex-debug", handlers.PlexDebugHandler)
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

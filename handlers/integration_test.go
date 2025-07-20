@@ -128,7 +128,13 @@ func TestM3UHandlerWithMockServer(t *testing.T) {
 	// Create handler
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
-	handler := NewM3UHandler(store, logger)
+
+	// Create test config
+	cfg := &config.Config{
+		BaseURL: "http://localhost:8080",
+	}
+
+	handler := NewM3UHandler(store, cfg, logger)
 
 	// Create test request
 	req := httptest.NewRequest("GET", "/iptv.m3u", nil)
@@ -213,7 +219,13 @@ func TestEPGHandlerWithMockServer(t *testing.T) {
 	// Create handler
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
-	handler := NewEPGHandler(store, logger)
+
+	// Create test config
+	cfg := &config.Config{
+		BaseURL: "http://localhost:8080",
+	}
+
+	handler := NewEPGHandler(store, cfg, logger)
 
 	// Create test request
 	req := httptest.NewRequest("GET", "/epg.xml", nil)
