@@ -8,6 +8,16 @@ import (
 	"os/exec"
 )
 
+// Codec constants.
+const (
+	codecH264 = "h264"
+	codecH265 = "h265"
+	codecCopy = "copy"
+	codecAAC  = "aac"
+	codecMP3  = "mp3"
+	auto      = "auto"
+)
+
 // StreamCodecs contains codec information for a stream.
 type StreamCodecs struct {
 	VideoCodec    string
@@ -78,28 +88,28 @@ func GetOptimalCodecs(codecs StreamCodecs, preferredVideoCodec, preferredAudioCo
 	audioCodec := preferredAudioCodec
 
 	// Auto-detect video codec if needed
-	if videoCodec == "auto" || videoCodec == "" {
+	if videoCodec == auto || videoCodec == "" {
 		// Check if video needs transcoding
-		if codecs.VideoCodec == "h264" || codecs.VideoCodec == "h265" {
-			videoCodec = "copy"
+		if codecs.VideoCodec == codecH264 || codecs.VideoCodec == codecH265 {
+			videoCodec = codecCopy
 		} else {
 			// Default to h264 for compatibility
-			videoCodec = "h264"
+			videoCodec = codecH264
 		}
 	}
 
 	// Auto-detect audio codec if needed
-	if audioCodec == "auto" || audioCodec == "" {
+	if audioCodec == auto || audioCodec == "" {
 		switch codecs.AudioCodec {
-		case "aac", "mp3", "mp2":
+		case codecAAC, codecMP3, "mp2":
 			// These are fine, just copy
-			audioCodec = "copy"
+			audioCodec = codecCopy
 		case "ac3", "eac3", "dts", "truehd":
 			// These need conversion for better compatibility
-			audioCodec = "aac"
+			audioCodec = codecAAC
 		default:
 			// Unknown codec, transcode to aac for safety
-			audioCodec = "aac"
+			audioCodec = codecAAC
 		}
 	}
 

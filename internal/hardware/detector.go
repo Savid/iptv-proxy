@@ -3,6 +3,7 @@ package hardware
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,21 @@ import (
 	"strings"
 
 	"github.com/savid/iptv-proxy/internal/types"
+)
+
+var (
+	// ErrNoNVIDIAGPU is returned when no NVIDIA GPUs are found.
+	ErrNoNVIDIAGPU = errors.New("no NVIDIA GPUs found")
+	// ErrNVIDIASMIFormat is returned when nvidia-smi output format is unexpected.
+	ErrNVIDIASMIFormat = errors.New("unexpected nvidia-smi output format")
+	// ErrNVENCNotAvailable is returned when NVIDIA GPU found but NVENC not available.
+	ErrNVENCNotAvailable = errors.New("NVIDIA GPU found but NVENC not available")
+	// ErrNoRenderNodes is returned when no render nodes are found.
+	ErrNoRenderNodes = errors.New("no render nodes found")
+	// ErrNoIntelGPU is returned when no Intel GPU with video acceleration found.
+	ErrNoIntelGPU = errors.New("no Intel GPU with video acceleration found")
+	// ErrNoAMDGPU is returned when no AMD GPU with video acceleration found.
+	ErrNoAMDGPU = errors.New("no AMD GPU with video acceleration found")
 )
 
 // Detector identifies available hardware acceleration devices.
@@ -33,7 +49,7 @@ func (d *Detector) DetectGPUs() []types.HardwareInfo {
 	gpus = append(gpus, types.HardwareInfo{
 		Type:         types.HardwareCPU,
 		DevicePath:   "",
-		Capabilities: []string{"h264", "h265", "vp8", "vp9"},
+		Capabilities: []string{codecH264, codecH265, "vp8", "vp9"},
 		Available:    true,
 	})
 
@@ -66,13 +82,13 @@ func (d *Detector) CheckNVIDIA() (*types.HardwareInfo, error) {
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if len(lines) == 0 {
-		return nil, fmt.Errorf("no NVIDIA GPUs found")
+		return nil, ErrNoNVIDIAGPU
 	}
 
 	// Use the first available GPU
 	parts := strings.Split(lines[0], ", ")
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("unexpected nvidia-smi output format")
+		return nil, ErrNVIDIASMIFormat
 	}
 
 	d.logger.Printf("Detected NVIDIA GPU: %s", parts[0])
@@ -80,14 +96,14 @@ func (d *Detector) CheckNVIDIA() (*types.HardwareInfo, error) {
 	// Test NVENC availability
 	capabilities := []string{}
 	if d.TestHardwareCodec(types.HardwareInfo{Type: types.HardwareNVIDIA}, "h264_nvenc") {
-		capabilities = append(capabilities, "h264")
+		capabilities = append(capabilities, codecH264)
 	}
 	if d.TestHardwareCodec(types.HardwareInfo{Type: types.HardwareNVIDIA}, "hevc_nvenc") {
-		capabilities = append(capabilities, "h265")
+		capabilities = append(capabilities, codecH265)
 	}
 
 	if len(capabilities) == 0 {
-		return nil, fmt.Errorf("NVIDIA GPU found but NVENC not available")
+		return nil, ErrNVENCNotAvailable
 	}
 
 	return &types.HardwareInfo{
@@ -103,48 +119,73 @@ func (d *Detector) CheckIntel() (*types.HardwareInfo, error) {
 	// Check for Intel GPU render nodes
 	renderNodes, err := filepath.Glob("/dev/dri/renderD*")
 	if err != nil || len(renderNodes) == 0 {
-		return nil, fmt.Errorf("no render nodes found")
+		return nil, ErrNoRenderNodes
 	}
 
 	// Try to find Intel GPU using vainfo
 	for _, node := range renderNodes {
-		cmd := exec.Command("vainfo", "--display", "drm", "--device", node)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			continue
-		}
-
-		outputStr := string(output)
-		if strings.Contains(outputStr, "Intel") || strings.Contains(outputStr, "i965") || strings.Contains(outputStr, "iHD") {
-			d.logger.Printf("Detected Intel GPU at %s", node)
-
-			// Test codec support
-			capabilities := []string{}
-			if strings.Contains(outputStr, "H264") || strings.Contains(outputStr, "AVC") {
-				capabilities = append(capabilities, "h264")
-			}
-			if strings.Contains(outputStr, "H265") || strings.Contains(outputStr, "HEVC") {
-				capabilities = append(capabilities, "h265")
-			}
-			if strings.Contains(outputStr, "VP8") {
-				capabilities = append(capabilities, "vp8")
-			}
-			if strings.Contains(outputStr, "VP9") {
-				capabilities = append(capabilities, "vp9")
-			}
-
-			if len(capabilities) > 0 {
-				return &types.HardwareInfo{
-					Type:         types.HardwareIntel,
-					DevicePath:   node,
-					Capabilities: capabilities,
-					Available:    true,
-				}, nil
-			}
+		hwInfo := d.checkIntelNode(node)
+		if hwInfo != nil {
+			return hwInfo, nil
 		}
 	}
 
-	return nil, fmt.Errorf("no Intel GPU with video acceleration found")
+	return nil, ErrNoIntelGPU
+}
+
+// checkIntelNode checks if a specific node is an Intel GPU.
+func (d *Detector) checkIntelNode(node string) *types.HardwareInfo {
+	cmd := exec.Command("vainfo", "--display", "drm", "--device", node) // #nosec G204 - node comes from filepath.Glob
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil
+	}
+
+	outputStr := string(output)
+	if !d.isIntelGPU(outputStr) {
+		return nil
+	}
+
+	d.logger.Printf("Detected Intel GPU at %s", node)
+	capabilities := d.extractCodecCapabilities(outputStr)
+
+	if len(capabilities) == 0 {
+		return nil
+	}
+
+	return &types.HardwareInfo{
+		Type:         types.HardwareIntel,
+		DevicePath:   node,
+		Capabilities: capabilities,
+		Available:    true,
+	}
+}
+
+// isIntelGPU checks if the vainfo output indicates an Intel GPU.
+func (d *Detector) isIntelGPU(output string) bool {
+	return strings.Contains(output, "Intel") ||
+		strings.Contains(output, "i965") ||
+		strings.Contains(output, "iHD")
+}
+
+// extractCodecCapabilities extracts supported codecs from vainfo output.
+func (d *Detector) extractCodecCapabilities(output string) []string {
+	capabilities := []string{}
+
+	if strings.Contains(output, "H264") || strings.Contains(output, "AVC") {
+		capabilities = append(capabilities, codecH264)
+	}
+	if strings.Contains(output, "H265") || strings.Contains(output, "HEVC") {
+		capabilities = append(capabilities, codecH265)
+	}
+	if strings.Contains(output, "VP8") {
+		capabilities = append(capabilities, "vp8")
+	}
+	if strings.Contains(output, "VP9") {
+		capabilities = append(capabilities, "vp9")
+	}
+
+	return capabilities
 }
 
 // CheckAMD detects AMD GPU availability through VA-API or AMF.
@@ -152,61 +193,69 @@ func (d *Detector) CheckAMD() (*types.HardwareInfo, error) {
 	// Check for AMD GPU render nodes
 	renderNodes, err := filepath.Glob("/dev/dri/renderD*")
 	if err != nil || len(renderNodes) == 0 {
-		return nil, fmt.Errorf("no render nodes found")
+		return nil, ErrNoRenderNodes
 	}
 
 	// Try to find AMD GPU using vainfo
 	for _, node := range renderNodes {
-		cmd := exec.Command("vainfo", "--display", "drm", "--device", node)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			continue
-		}
-
-		outputStr := string(output)
-		if strings.Contains(outputStr, "AMD") || strings.Contains(outputStr, "radeonsi") {
-			d.logger.Printf("Detected AMD GPU at %s", node)
-
-			// Test codec support
-			capabilities := []string{}
-			if strings.Contains(outputStr, "H264") || strings.Contains(outputStr, "AVC") {
-				capabilities = append(capabilities, "h264")
-			}
-			if strings.Contains(outputStr, "H265") || strings.Contains(outputStr, "HEVC") {
-				capabilities = append(capabilities, "h265")
-			}
-			if strings.Contains(outputStr, "VP8") {
-				capabilities = append(capabilities, "vp8")
-			}
-			if strings.Contains(outputStr, "VP9") {
-				capabilities = append(capabilities, "vp9")
-			}
-
-			if len(capabilities) > 0 {
-				return &types.HardwareInfo{
-					Type:         types.HardwareAMD,
-					DevicePath:   node,
-					Capabilities: capabilities,
-					Available:    true,
-				}, nil
-			}
+		hwInfo := d.checkAMDNode(node)
+		if hwInfo != nil {
+			return hwInfo, nil
 		}
 	}
 
 	// Check for AMD AMF on Windows
-	if strings.Contains(strings.ToLower(os.Getenv("OS")), "windows") {
-		// Test AMF availability
-		if d.TestHardwareCodec(types.HardwareInfo{Type: types.HardwareAMD}, "h264_amf") {
-			return &types.HardwareInfo{
-				Type:         types.HardwareAMD,
-				DevicePath:   "",
-				Capabilities: []string{"h264", "h265"},
-				Available:    true,
-			}, nil
-		}
+	if d.isWindowsAMFAvailable() {
+		return &types.HardwareInfo{
+			Type:         types.HardwareAMD,
+			DevicePath:   "",
+			Capabilities: []string{codecH264, codecH265},
+			Available:    true,
+		}, nil
 	}
 
-	return nil, fmt.Errorf("no AMD GPU with video acceleration found")
+	return nil, ErrNoAMDGPU
+}
+
+// checkAMDNode checks if a specific node is an AMD GPU.
+func (d *Detector) checkAMDNode(node string) *types.HardwareInfo {
+	cmd := exec.Command("vainfo", "--display", "drm", "--device", node) // #nosec G204 - node comes from filepath.Glob
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil
+	}
+
+	outputStr := string(output)
+	if !d.isAMDGPU(outputStr) {
+		return nil
+	}
+
+	d.logger.Printf("Detected AMD GPU at %s", node)
+	capabilities := d.extractCodecCapabilities(outputStr)
+
+	if len(capabilities) == 0 {
+		return nil
+	}
+
+	return &types.HardwareInfo{
+		Type:         types.HardwareAMD,
+		DevicePath:   node,
+		Capabilities: capabilities,
+		Available:    true,
+	}
+}
+
+// isAMDGPU checks if the vainfo output indicates an AMD GPU.
+func (d *Detector) isAMDGPU(output string) bool {
+	return strings.Contains(output, "AMD") || strings.Contains(output, "radeonsi")
+}
+
+// isWindowsAMFAvailable checks if AMD AMF is available on Windows.
+func (d *Detector) isWindowsAMFAvailable() bool {
+	if !strings.Contains(strings.ToLower(os.Getenv("OS")), "windows") {
+		return false
+	}
+	return d.TestHardwareCodec(types.HardwareInfo{Type: types.HardwareAMD}, "h264_amf")
 }
 
 // TestHardwareCodec tests if a specific hardware codec is available.
@@ -226,12 +275,14 @@ func (d *Detector) TestHardwareCodec(hw types.HardwareInfo, codec string) bool {
 		if hw.DevicePath != "" {
 			args = append([]string{"-vaapi_device", hw.DevicePath}, args...)
 		}
+	case types.HardwareAuto, types.HardwareCPU:
+		// No special options needed for auto or CPU
 	}
 
 	// Output to null
 	args = append(args, "-f", "null", "-")
 
-	cmd := exec.Command("ffmpeg", args...)
+	cmd := exec.Command("ffmpeg", args...) // #nosec G204 - args are internally constructed
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 

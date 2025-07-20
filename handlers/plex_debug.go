@@ -13,17 +13,18 @@ func PlexDebugHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Detect client type
 	clientType := "Unknown"
-	if strings.Contains(userAgent, "Plex Media Player") {
+	switch {
+	case strings.Contains(userAgent, "Plex Media Player"):
 		clientType = "Plex Media Player (TV/Desktop)"
-	} else if strings.Contains(userAgent, "PlexWeb") {
+	case strings.Contains(userAgent, "PlexWeb"):
 		clientType = "Plex Web"
-	} else if strings.Contains(userAgent, "Android") && strings.Contains(userAgent, "Plex") {
+	case strings.Contains(userAgent, "Android") && strings.Contains(userAgent, "Plex"):
 		clientType = "Plex Android"
-	} else if strings.Contains(userAgent, "iOS") && strings.Contains(userAgent, "Plex") {
+	case strings.Contains(userAgent, "iOS") && strings.Contains(userAgent, "Plex"):
 		clientType = "Plex iOS"
-	} else if strings.Contains(userAgent, "Safari") && r.Header.Get("X-Plex-Product") != "" {
+	case strings.Contains(userAgent, "Safari") && r.Header.Get("X-Plex-Product") != "":
 		clientType = "Plex Web (Safari)"
-	} else if strings.Contains(userAgent, "Chrome") && r.Header.Get("X-Plex-Product") != "" {
+	case strings.Contains(userAgent, "Chrome") && r.Header.Get("X-Plex-Product") != "":
 		clientType = "Plex Web (Chrome)"
 	}
 
@@ -37,27 +38,27 @@ func PlexDebugHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Write debug info
 	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintf(w, "Plex Client Debug Information\n")
-	fmt.Fprintf(w, "=============================\n\n")
-	fmt.Fprintf(w, "User-Agent: %s\n", userAgent)
-	fmt.Fprintf(w, "Detected Client Type: %s\n", clientType)
-	fmt.Fprintf(w, "Recommended H.264 Profile: %s\n", recommendedProfile)
-	fmt.Fprintf(w, "Recommended Generator: %s\n\n", recommendedGenerator)
+	_, _ = fmt.Fprintf(w, "Plex Client Debug Information\n")
+	_, _ = fmt.Fprintf(w, "=============================\n\n")
+	_, _ = fmt.Fprintf(w, "User-Agent: %s\n", userAgent)
+	_, _ = fmt.Fprintf(w, "Detected Client Type: %s\n", clientType)
+	_, _ = fmt.Fprintf(w, "Recommended H.264 Profile: %s\n", recommendedProfile)
+	_, _ = fmt.Fprintf(w, "Recommended Generator: %s\n\n", recommendedGenerator)
 
-	fmt.Fprintf(w, "All Headers:\n")
-	fmt.Fprintf(w, "------------\n")
+	_, _ = fmt.Fprintf(w, "All Headers:\n")
+	_, _ = fmt.Fprintf(w, "------------\n")
 	for name, values := range r.Header {
 		for _, value := range values {
-			fmt.Fprintf(w, "%s: %s\n", name, value)
+			_, _ = fmt.Fprintf(w, "%s: %s\n", name, value)
 		}
 	}
 
-	fmt.Fprintf(w, "\nPlex-Specific Headers:\n")
-	fmt.Fprintf(w, "---------------------\n")
+	_, _ = fmt.Fprintf(w, "\nPlex-Specific Headers:\n")
+	_, _ = fmt.Fprintf(w, "---------------------\n")
 	for name, values := range r.Header {
 		if strings.HasPrefix(name, "X-Plex-") {
 			for _, value := range values {
-				fmt.Fprintf(w, "%s: %s\n", name, value)
+				_, _ = fmt.Fprintf(w, "%s: %s\n", name, value)
 			}
 		}
 	}

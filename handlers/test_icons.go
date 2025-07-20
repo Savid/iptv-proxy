@@ -47,7 +47,7 @@ func TestIconHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
-	w.Write(iconData)
+	_, _ = w.Write(iconData)
 }
 
 // generateChannelIcon creates an SVG icon for a test channel (100x100).

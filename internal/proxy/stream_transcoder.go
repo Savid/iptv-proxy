@@ -2,6 +2,7 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,11 @@ import (
 	"github.com/savid/iptv-proxy/internal/hardware"
 	"github.com/savid/iptv-proxy/internal/transcode"
 	"github.com/savid/iptv-proxy/internal/types"
+)
+
+// Constants.
+const (
+	adaptive = "adaptive"
 )
 
 // StreamTranscoder handles transcoding and proxying of IPTV streams.
@@ -87,12 +93,12 @@ func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Reque
 	audioBitrate := st.config.AudioBitrate
 
 	// Apply adaptive bitrate if configured
-	if videoBitrate == "adaptive" || audioBitrate == "adaptive" {
+	if videoBitrate == adaptive || audioBitrate == adaptive {
 		adaptiveVideoBitrate, adaptiveAudioBitrate := transcode.CalculateAdaptiveBitrate(streamInfo)
-		if videoBitrate == "adaptive" {
+		if videoBitrate == adaptive {
 			videoBitrate = adaptiveVideoBitrate
 		}
-		if audioBitrate == "adaptive" {
+		if audioBitrate == adaptive {
 			audioBitrate = adaptiveAudioBitrate
 		}
 	}
@@ -117,7 +123,11 @@ func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Reque
 	if err := transcoder.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start transcoder: %w", err)
 	}
-	defer transcoder.Close()
+	defer func() {
+		if err := transcoder.Close(); err != nil {
+			st.logger.Printf("Error closing transcoder: %v", err)
+		}
+	}()
 
 	// Create buffer manager
 	bufferManager := buffer.NewBufferManager(bufferConfig, st.logger)
@@ -126,7 +136,11 @@ func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Reque
 	if err := bufferManager.Start(ctx, transcoder); err != nil {
 		return fmt.Errorf("failed to start buffer manager: %w", err)
 	}
-	defer bufferManager.Close()
+	defer func() {
+		if err := bufferManager.Close(); err != nil {
+			st.logger.Printf("Error closing buffer manager: %v", err)
+		}
+	}()
 
 	// Set response headers
 	w.Header().Set("Content-Type", "video/mp2t")
@@ -137,7 +151,7 @@ func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Reque
 
 	// Stream to client
 	_, err = io.Copy(w, bufferManager)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		st.logger.Printf("Error streaming to client: %v", err)
 		return err
 	}

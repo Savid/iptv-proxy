@@ -90,11 +90,11 @@ func TestIntegrationWithExampleFiles(t *testing.T) {
 	// Test filter with real data
 	filtered, channelMap := epg.Filter(tv, channels)
 
-	// With direct matching, "AU: FOX SPORTS 502" won't match "FOX SPORTS 502"
-	// So we expect 0 matches
-	expectedMatches := 0
-	if len(filtered.Channels) != expectedMatches {
-		t.Errorf("Expected %d matched channels, got %d", expectedMatches, len(filtered.Channels))
+	// With fake EPG generation, all M3U channels will have EPG data
+	// (either matched or generated)
+	expectedChannels := len(channels)
+	if len(filtered.Channels) != expectedChannels {
+		t.Errorf("Expected %d channels (matched + fake), got %d", expectedChannels, len(filtered.Channels))
 
 		// Debug: show what channels we have
 		t.Log("M3U channels with tvg-name:")
@@ -110,14 +110,15 @@ func TestIntegrationWithExampleFiles(t *testing.T) {
 		}
 	}
 
-	// Test that programs are filtered correctly (should be 0 since no channels match)
-	if len(filtered.Programs) != 0 {
-		t.Errorf("Expected 0 filtered programs, got %d", len(filtered.Programs))
+	// Test that programs are filtered correctly
+	// Each channel should have at least one program (real or fake)
+	if len(filtered.Programs) < expectedChannels {
+		t.Errorf("Expected at least %d programs (one per channel), got %d", expectedChannels, len(filtered.Programs))
 	}
 
-	// Verify channel mapping
-	if len(channelMap) != expectedMatches {
-		t.Errorf("Expected %d channel mappings, got %d", expectedMatches, len(channelMap))
+	// Verify channel mapping - should have all channels mapped
+	if len(channelMap) != expectedChannels {
+		t.Errorf("Expected %d channel mappings, got %d", expectedChannels, len(channelMap))
 	}
 }
 

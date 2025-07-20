@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// DebugHandler logs all incoming request details for debugging
+// DebugHandler logs all incoming request details for debugging.
 func DebugHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("\n=== DEBUG Request ===\n")
 	fmt.Printf("Method: %s\n", r.Method)
@@ -33,5 +33,5 @@ func DebugHandler(w http.ResponseWriter, r *http.Request) {
 	// Return a simple response
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Debug endpoint - check server logs for request details\n")
+	_, _ = fmt.Fprintf(w, "Debug endpoint - check server logs for request details\n")
 }

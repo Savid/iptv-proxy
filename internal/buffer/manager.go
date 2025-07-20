@@ -3,7 +3,7 @@ package buffer
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"log"
 	"sync"
@@ -12,8 +12,13 @@ import (
 	"github.com/savid/iptv-proxy/internal/types"
 )
 
-// BufferManager manages a circular buffer with prefetch and retry capabilities.
-type BufferManager struct {
+var (
+	// ErrTimeout is returned when waiting for data times out.
+	ErrTimeout = errors.New("timeout waiting for data")
+)
+
+// Manager manages a circular buffer with prefetch and retry capabilities.
+type Manager struct {
 	buffer       *CircularBuffer
 	config       types.BufferConfig
 	retryManager *RetryManager
@@ -29,8 +34,8 @@ type BufferManager struct {
 }
 
 // NewBufferManager creates a new buffer manager with the specified configuration.
-func NewBufferManager(config types.BufferConfig, logger *log.Logger) *BufferManager {
-	return &BufferManager{
+func NewBufferManager(config types.BufferConfig, logger *log.Logger) *Manager {
+	return &Manager{
 		buffer: NewCircularBuffer(config.Size),
 		config: config,
 		retryManager: NewRetryManager(
@@ -43,14 +48,14 @@ func NewBufferManager(config types.BufferConfig, logger *log.Logger) *BufferMana
 }
 
 // Start begins buffering data from the reader.
-func (m *BufferManager) Start(ctx context.Context, reader io.Reader) error {
+func (m *Manager) Start(ctx context.Context, reader io.Reader) error {
 	// Start prefetch goroutine
 	go m.prefetchLoop(ctx, reader)
 	return nil
 }
 
 // prefetchLoop continuously reads from the source and fills the buffer.
-func (m *BufferManager) prefetchLoop(ctx context.Context, reader io.Reader) {
+func (m *Manager) prefetchLoop(ctx context.Context, reader io.Reader) {
 	m.prefetchMu.Lock()
 	m.prefetchActive = true
 	m.prefetchMu.Unlock()
@@ -80,7 +85,7 @@ func (m *BufferManager) prefetchLoop(ctx context.Context, reader io.Reader) {
 			// Read with retry
 			n, err := m.retryManager.RetryRead(reader, buf)
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					m.logger.Printf("Source stream ended")
 					return
 				}
@@ -103,7 +108,7 @@ func (m *BufferManager) prefetchLoop(ctx context.Context, reader io.Reader) {
 }
 
 // Read reads data from the buffer, blocking if necessary.
-func (m *BufferManager) Read(p []byte) (int, error) {
+func (m *Manager) Read(p []byte) (int, error) {
 	// Wait for minimum threshold before allowing reads
 	if err := m.WaitForData(m.config.MinThreshold); err != nil {
 		return 0, err
@@ -126,7 +131,7 @@ func (m *BufferManager) Read(p []byte) (int, error) {
 }
 
 // WaitForData blocks until at least minBytes are available in the buffer.
-func (m *BufferManager) WaitForData(minBytes int) error {
+func (m *Manager) WaitForData(minBytes int) error {
 	timeout := time.After(30 * time.Second)
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -134,7 +139,7 @@ func (m *BufferManager) WaitForData(minBytes int) error {
 	for {
 		select {
 		case <-timeout:
-			return fmt.Errorf("timeout waiting for data")
+			return ErrTimeout
 		case <-ticker.C:
 			if m.buffer.Available() >= minBytes {
 				return nil
@@ -147,7 +152,7 @@ func (m *BufferManager) WaitForData(minBytes int) error {
 }
 
 // Stats returns current buffer statistics.
-func (m *BufferManager) Stats() types.BufferStats {
+func (m *Manager) Stats() types.BufferStats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -158,13 +163,13 @@ func (m *BufferManager) Stats() types.BufferStats {
 }
 
 // Close stops the buffer manager and releases resources.
-func (m *BufferManager) Close() error {
+func (m *Manager) Close() error {
 	m.buffer.Close()
 	return nil
 }
 
 // isPrefetchActive checks if the prefetch loop is still running.
-func (m *BufferManager) isPrefetchActive() bool {
+func (m *Manager) isPrefetchActive() bool {
 	m.prefetchMu.Lock()
 	defer m.prefetchMu.Unlock()
 	return m.prefetchActive

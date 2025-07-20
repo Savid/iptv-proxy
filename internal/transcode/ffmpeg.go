@@ -3,6 +3,7 @@ package transcode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,24 @@ import (
 	"github.com/savid/iptv-proxy/internal/hardware"
 	"github.com/savid/iptv-proxy/internal/types"
 )
+
+var (
+	// ErrTranscoderClosed is returned when operations are attempted on a closed transcoder.
+	ErrTranscoderClosed = errors.New("transcoder already closed")
+	// ErrStdinNotAvailable is returned when stdin pipe is not available.
+	ErrStdinNotAvailable = errors.New("stdin not available")
+	// ErrStdoutNotAvailable is returned when stdout pipe is not available.
+	ErrStdoutNotAvailable = errors.New("stdout not available")
+)
+
+// CloseError wraps multiple errors that occurred during close.
+type CloseError struct {
+	Errors []error
+}
+
+func (e CloseError) Error() string {
+	return fmt.Sprintf("close errors: %v", e.Errors)
+}
 
 // FFmpegTranscoder handles transcoding using FFmpeg.
 type FFmpegTranscoder struct {
@@ -54,13 +73,13 @@ func (t *FFmpegTranscoder) Start(ctx context.Context) error {
 	defer t.mu.Unlock()
 
 	if t.closed {
-		return fmt.Errorf("transcoder already closed")
+		return ErrTranscoderClosed
 	}
 
 	args := t.buildCommand()
 	t.logger.Printf("Starting FFmpeg with args: %v", args)
 
-	t.cmd = exec.CommandContext(ctx, "ffmpeg", args...)
+	t.cmd = exec.CommandContext(ctx, "ffmpeg", args...) // #nosec G204 - args are internally constructed
 
 	// Set up pipes
 	var err error
@@ -159,15 +178,10 @@ func (t *FFmpegTranscoder) buildCommand() []string {
 	return args
 }
 
-// addHardwareArgs adds hardware-specific arguments to the FFmpeg command.
-func (t *FFmpegTranscoder) addHardwareArgs(args []string) []string {
-	return t.selector.GetFFmpegArgs(t.hardware, t.profile)
-}
-
 // Write writes data to the transcoder input (for pipe input).
 func (t *FFmpegTranscoder) Write(p []byte) (n int, err error) {
 	if t.stdin == nil {
-		return 0, fmt.Errorf("stdin not available")
+		return 0, ErrStdinNotAvailable
 	}
 	return t.stdin.Write(p)
 }
@@ -175,7 +189,7 @@ func (t *FFmpegTranscoder) Write(p []byte) (n int, err error) {
 // Read reads transcoded data from the output.
 func (t *FFmpegTranscoder) Read(p []byte) (n int, err error) {
 	if t.stdout == nil {
-		return 0, fmt.Errorf("stdout not available")
+		return 0, ErrStdoutNotAvailable
 	}
 	return t.stdout.Read(p)
 }
@@ -203,7 +217,8 @@ func (t *FFmpegTranscoder) Close() error {
 	if t.cmd != nil && t.cmd.Process != nil {
 		if err := t.cmd.Wait(); err != nil {
 			// Exit status 255 is often normal termination for streaming
-			if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 255 {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 255 {
 				errs = append(errs, fmt.Errorf("FFmpeg process error: %w", err))
 			}
 		}
@@ -222,7 +237,7 @@ func (t *FFmpegTranscoder) Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("close errors: %v", errs)
+		return CloseError{Errors: errs}
 	}
 	return nil
 }

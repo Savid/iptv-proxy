@@ -105,10 +105,10 @@ func (h *PlexTestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Clean up on exit
 	defer func() {
-		stdout.Close()
+		_ = stdout.Close()
 		if cmd.Process != nil {
-			cmd.Process.Kill()
-			cmd.Wait()
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
 		}
 	}()
 
@@ -118,7 +118,7 @@ func (h *PlexTestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			fmt.Printf("[PlexTest] Client disconnected\n")
 			if cmd.Process != nil {
-				cmd.Process.Kill()
+				_ = cmd.Process.Kill()
 			}
 		case <-done:
 			return

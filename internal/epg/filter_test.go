@@ -25,9 +25,9 @@ func TestFilter(t *testing.T) {
 
 	// Create test M3U channels
 	m3uChannels := []m3u.Channel{
-		{TVGName: "FOX SPORTS 502"},
-		{TVGName: "FOX SPORTS 503"},
-		{TVGName: "US: ESPN"},
+		{Name: "FOX SPORTS 502", TVGName: "FOX SPORTS 502"},
+		{Name: "FOX SPORTS 503", TVGName: "FOX SPORTS 503"},
+		{Name: "US: ESPN", TVGName: "US: ESPN"},
 	}
 
 	// Run filter
@@ -89,8 +89,8 @@ func TestFilterDuplicates(t *testing.T) {
 
 	// Create test M3U channels
 	m3uChannels := []m3u.Channel{
-		{TVGName: "Channel 1"},
-		{TVGName: "Channel 2"},
+		{Name: "Channel 1", TVGName: "Channel 1"},
+		{Name: "Channel 2", TVGName: "Channel 2"},
 	}
 
 	// Run filter
@@ -136,21 +136,21 @@ func TestFilterNoMatches(t *testing.T) {
 
 	// Create test M3U channels with no matches
 	m3uChannels := []m3u.Channel{
-		{TVGName: "Different Channel 1"},
-		{TVGName: "Different Channel 2"},
+		{Name: "Different Channel 1", TVGName: "Different Channel 1"},
+		{Name: "Different Channel 2", TVGName: "Different Channel 2"},
 	}
 
 	// Run filter
 	filtered, channelMap := Filter(epgData, m3uChannels)
 
-	// Should have no matches
-	if len(filtered.Channels) != 0 {
-		t.Errorf("Expected 0 filtered channels, got %d", len(filtered.Channels))
+	// Should have fake EPG generated for unmatched channels
+	if len(filtered.Channels) != 2 {
+		t.Errorf("Expected 2 fake channels, got %d", len(filtered.Channels))
 	}
-	if len(filtered.Programs) != 0 {
-		t.Errorf("Expected 0 filtered programs, got %d", len(filtered.Programs))
+	if len(filtered.Programs) != 2 {
+		t.Errorf("Expected 2 fake programs, got %d", len(filtered.Programs))
 	}
-	if len(channelMap) != 0 {
-		t.Errorf("Expected 0 channel mappings, got %d", len(channelMap))
+	if len(channelMap) != 2 {
+		t.Errorf("Expected 2 channel mappings, got %d", len(channelMap))
 	}
 }

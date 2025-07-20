@@ -62,7 +62,7 @@ func CreateProfile(videoCodec, audioCodec, videoBitrate, audioBitrate string) ty
 			"-bf", "2", // B-frames
 			"-pix_fmt", "yuv420p",
 		)
-	case "h264":
+	case codecH264:
 		extraArgs = append(extraArgs,
 			"-c:v", "libx264",
 			"-b:v", videoBitrate,
@@ -71,14 +71,14 @@ func CreateProfile(videoCodec, audioCodec, videoBitrate, audioBitrate string) ty
 			"-level", "4.1",
 			"-pix_fmt", "yuv420p",
 		)
-	case "h265":
+	case codecH265:
 		extraArgs = append(extraArgs,
 			"-c:v", "libx265",
 			"-b:v", videoBitrate,
 			"-preset", "medium",
 			"-pix_fmt", "yuv420p",
 		)
-	case "copy":
+	case codecCopy:
 		extraArgs = append(extraArgs, "-c:v", "copy")
 	}
 
@@ -91,21 +91,21 @@ func CreateProfile(videoCodec, audioCodec, videoBitrate, audioBitrate string) ty
 			"-ar", "48000",
 			"-ac", "2",
 		)
-	case "mp3":
+	case codecMP3:
 		extraArgs = append(extraArgs,
 			"-c:a", "libmp3lame",
 			"-b:a", audioBitrate,
 			"-ar", "44100",
 			"-ac", "2",
 		)
-	case "aac":
+	case codecAAC:
 		extraArgs = append(extraArgs,
 			"-c:a", "aac",
 			"-b:a", audioBitrate,
 			"-ar", "48000",
 			"-ac", "2",
 		)
-	case "copy":
+	case codecCopy:
 		extraArgs = append(extraArgs, "-c:a", "copy")
 	}
 
@@ -132,17 +132,18 @@ func CalculateAdaptiveBitrate(source StreamInfo) (videoBitrate, audioBitrate str
 	pixels := source.Width * source.Height
 
 	// Resolution-based base rates
-	if pixels >= 3840*2160 { // 4K
+	switch {
+	case pixels >= 3840*2160: // 4K
 		baseRate = 15000
-	} else if pixels >= 2560*1440 { // 1440p
+	case pixels >= 2560*1440: // 1440p
 		baseRate = 10000
-	} else if pixels >= 1920*1080 { // 1080p
+	case pixels >= 1920*1080: // 1080p
 		baseRate = 5000
-	} else if pixels >= 1280*720 { // 720p
+	case pixels >= 1280*720: // 720p
 		baseRate = 2500
-	} else if pixels >= 854*480 { // 480p
+	case pixels >= 854*480: // 480p
 		baseRate = 1500
-	} else { // 360p and below
+	default: // 360p and below
 		baseRate = 800
 	}
 

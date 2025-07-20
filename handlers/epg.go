@@ -48,7 +48,7 @@ func (h *EPGHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// appendTestChannelEPG adds EPG data for test channels
+// appendTestChannelEPG adds EPG data for test channels.
 func (h *EPGHandler) appendTestChannelEPG(originalEPG []byte) []byte {
 	// Parse the original EPG to find the closing </tv> tag
 	epgStr := string(originalEPG)
