@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/internal/buffer"
 	"github.com/savid/iptv-proxy/internal/hardware"
 	"github.com/savid/iptv-proxy/internal/transcode"
@@ -17,7 +18,8 @@ import (
 
 // Constants.
 const (
-	adaptive = "adaptive"
+	adaptive  = "adaptive"
+	codecCopy = "copy"
 )
 
 // StreamTranscoder handles transcoding and proxying of IPTV streams.
@@ -62,8 +64,15 @@ func NewStreamTranscoder(cfg *TranscoderConfig, logger *log.Logger) (*StreamTran
 func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Request, targetURL string) error {
 	ctx := r.Context()
 
-	// Select hardware for the video codec
-	hw, err := st.selector.SelectHardware(st.config.VideoCodec)
+	// Select hardware based on configuration
+	// For backward compatibility with old config, use "auto" if hardware accel is set
+	deviceType := "auto"
+	deviceID := 0
+	if st.config.HardwareAccel == "none" || st.config.HardwareAccel == "" {
+		deviceType = "none"
+	}
+
+	hw, err := st.selector.SelectHardware(deviceType, deviceID)
 	if err != nil {
 		return fmt.Errorf("failed to select hardware: %w", err)
 	}
@@ -78,8 +87,6 @@ func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Reque
 		MaxRetries:    st.config.MaxRetries,
 		RetryDelay:    st.config.RetryDelay,
 	}
-
-	// plex-gump is the only supported profile
 
 	// Probe the stream to get information
 	streamInfo, err := transcode.ProbeStream(targetURL)
@@ -103,21 +110,58 @@ func (st *StreamTranscoder) TranscodeStream(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Create transcoder
-	transcoder, err := transcode.NewTranscoder(
-		st.config.VideoCodec,
-		st.config.AudioCodec,
-		videoBitrate,
-		audioBitrate,
+	// Create quality mapper
+	qualityMapper := transcode.NewQualityMapper()
+
+	// Create profile using the new config structure
+	// Determine transcode mode based on codecs
+	transcodeMode := "transcode"
+	if st.config.VideoCodec == codecCopy && st.config.AudioCodec == codecCopy {
+		transcodeMode = codecCopy
+	}
+
+	// Create config for profile creation
+	cfg := struct {
+		TranscodeMode      string
+		VideoCodec         string
+		AudioCodec         string
+		VideoQuality       string
+		AudioQuality       string
+		CustomVideoBitrate string
+		CustomAudioBitrate string
+	}{
+		TranscodeMode:      transcodeMode,
+		VideoCodec:         st.config.VideoCodec,
+		AudioCodec:         st.config.AudioCodec,
+		VideoQuality:       "custom", // Use custom since we have specific bitrates
+		AudioQuality:       "custom", // Use custom since we have specific bitrates
+		CustomVideoBitrate: videoBitrate,
+		CustomAudioBitrate: audioBitrate,
+	}
+
+	// Create transcoding profile
+	profile := transcode.NewTranscodingProfile(&config.Config{
+		TranscodeMode:      cfg.TranscodeMode,
+		VideoCodec:         cfg.VideoCodec,
+		AudioCodec:         cfg.AudioCodec,
+		VideoQuality:       cfg.VideoQuality,
+		AudioQuality:       cfg.AudioQuality,
+		CustomVideoBitrate: cfg.CustomVideoBitrate,
+		CustomAudioBitrate: cfg.CustomAudioBitrate,
+	}, qualityMapper)
+
+	// Apply hardware acceleration to profile
+	appliedProfile := transcode.ApplyHardware(*profile, hw)
+
+	// Create FFmpeg transcoder directly
+	transcoder := transcode.NewFFmpegTranscoder(
+		appliedProfile,
 		hw,
 		bufferConfig,
 		st.selector,
 		targetURL,
 		st.logger,
 	)
-	if err != nil {
-		return fmt.Errorf("failed to create transcoder: %w", err)
-	}
 
 	// Start transcoding
 	if err := transcoder.Start(ctx); err != nil {

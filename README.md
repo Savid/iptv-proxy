@@ -12,7 +12,11 @@ A feature-rich IPTV proxy application written in Go that provides advanced strea
 
 - High-performance stream proxying with concurrent connection handling
 - GPU-accelerated transcoding (NVIDIA NVENC, Intel Quick Sync, AMD VCE/VCN)
-- Automatic hardware detection and fallback to CPU encoding
+- **Multi-GPU support** - Select specific GPUs with device IDs (e.g., nvidia:0, nvidia:1)
+- **Quality presets** - Simple low/medium/high presets instead of manual bitrates
+- **Transcode modes** - Easy switching between copy and transcode modes
+- **Codec validation** - Automatic compatibility checking between codecs and hardware
+- Automatic hardware detection with detailed device listing at startup
 - Built-in test channels with various resolutions and patterns
 - Circular buffer with retry logic for reliable streaming
 - HDHomeRun device emulation for seamless integration
@@ -38,17 +42,34 @@ go build -o iptv-proxy
   -base "http://localhost:8080"
 ```
 
-### With Test Channels and Transcoding
+### Stream Copy Mode (No Transcoding)
 ```bash
 ./iptv-proxy \
   -m3u "http://example.com/playlist.m3u" \
   -epg "http://example.com/epg.xml" \
   -base "http://localhost:8080" \
-  -test-channels \
-  -video-codec h264 \
-  -audio-codec aac \
-  -hardware-accel auto \
-  -buffer-size 20
+  -transcode-mode copy
+```
+
+### Transcoding with Quality Presets
+```bash
+./iptv-proxy \
+  -m3u "http://example.com/playlist.m3u" \
+  -epg "http://example.com/epg.xml" \
+  -base "http://localhost:8080" \
+  -video-quality high \
+  -audio-quality medium \
+  -hardware-device auto
+```
+
+### Multi-GPU Selection
+```bash
+./iptv-proxy \
+  -m3u "http://example.com/playlist.m3u" \
+  -epg "http://example.com/epg.xml" \
+  -base "http://localhost:8080" \
+  -hardware-device nvidia:1 \
+  -video-codec h265
 ```
 
 ### Full Example with All Options
@@ -62,34 +83,52 @@ go build -o iptv-proxy
   -log-level info \
   -refresh-interval 30m \
   -test-channels \
+  -transcode-mode transcode \
+  -hardware-device nvidia:0 \
   -video-codec h264 \
   -audio-codec aac \
-  -video-bitrate 5000k \
-  -audio-bitrate 192k \
-  -hardware-accel nvidia \
+  -video-quality custom \
+  -audio-quality custom \
+  -custom-video-bitrate 5000k \
+  -custom-audio-bitrate 192k \
   -buffer-size 20 \
   -buffer-duration 15s \
+  -buffer-prefetch-ratio 0.8 \
   -tuner-count 4
 ```
 
 ### Command Line Arguments
 
-- `-m3u` (required): URL of the M3U playlist
-- `-epg` (required): URL of the EPG XML file
-- `-base` (required): Base URL for rewritten stream URLs (e.g., http://localhost:8080)
+#### Required Arguments
+- `-m3u`: URL of the M3U playlist
+- `-epg`: URL of the EPG XML file
+- `-base`: Base URL for rewritten stream URLs (e.g., http://localhost:8080)
+
+#### Server Configuration
 - `-bind`: IP address to bind the server to (default: 0.0.0.0)
 - `-port`: Port to listen on (default: 8080)
 - `-log-level`: Log level - debug, info, warn, error (default: info)
 - `-refresh-interval`: Interval between data refreshes (default: 30m)
-- `-test-channels`: Enable test channels (default: false)
-- `-video-codec`: Video codec - copy, h264, h265, mpeg2 (default: mpeg2)
-- `-audio-codec`: Audio codec - copy, aac, mp3, mp2 (default: mp2)
-- `-video-bitrate`: Video bitrate (e.g., 6000k, 8M) (default: 6000k)
-- `-audio-bitrate`: Audio bitrate (e.g., 192k, 224k) (default: 224k)
-- `-hardware-accel`: Hardware acceleration - auto, nvidia, intel, amd, none (default: auto)
+- `-tuner-count`: Number of tuners to advertise for HDHomeRun (default: 2)
+
+#### Transcoding Configuration
+- `-transcode-mode`: Transcoding mode - copy or transcode (default: transcode)
+- `-hardware-device`: Hardware device - auto, none, or device ID (e.g., nvidia:0, intel:0) (default: auto)
+- `-video-codec`: Video codec when transcoding - h264, h265, vp9, mpeg2 (default: h264)
+- `-audio-codec`: Audio codec when transcoding - aac, mp3, mp2, opus (default: aac)
+- `-video-quality`: Video quality - low, medium, high, or custom (default: medium)
+- `-audio-quality`: Audio quality - low, medium, high, or custom (default: medium)
+- `-custom-video-bitrate`: Custom video bitrate when quality is 'custom' (e.g., 8M, 10000k)
+- `-custom-audio-bitrate`: Custom audio bitrate when quality is 'custom' (e.g., 320k)
+
+#### Buffer Configuration
 - `-buffer-size`: Stream buffer size in MB (default: 10)
 - `-buffer-duration`: Buffer duration (default: 10s)
-- `-tuner-count`: Number of tuners to advertise for HDHomeRun (default: 4)
+- `-buffer-prefetch-ratio`: Buffer prefetch ratio 0.0-1.0 (default: 0.8)
+
+#### Test Channels
+- `-test-channels`: Enable test channels (default: false)
+- `-test-port`: Port for test channel server (default: 8889)
 
 ## Endpoints
 
@@ -139,53 +178,109 @@ Channels are matched exactly as specified without any normalization or fuzzy mat
 
 The proxy supports hardware-accelerated transcoding using:
 - **NVIDIA**: NVENC (H.264/H.265)
-- **Intel**: Quick Sync Video (H.264/H.265)
+- **Intel**: Quick Sync Video (H.264/H.265/VP9)
 - **AMD**: VCE/VCN (H.264/H.265)
 
-Hardware is automatically detected at startup. If no compatible GPU is found, the system falls back to CPU encoding.
+### Hardware Detection
+At startup, the proxy automatically detects all available GPUs and displays them:
+```
+Available hardware devices:
+  Device type=nvidia id=0 name=NVIDIA GeForce RTX 3080 capabilities=[h264 h265]
+  Device type=nvidia id=1 name=NVIDIA GeForce GTX 1660 capabilities=[h264 h265]
+  Device type=intel id=0 name=Intel GPU (iHD driver) capabilities=[h264 h265 vp9]
+```
+
+### Multi-GPU Support
+You can select a specific GPU using the device ID:
+- `-hardware-device auto`: Automatically select the best available GPU (default)
+- `-hardware-device none`: Force CPU encoding
+- `-hardware-device nvidia:0`: Use the first NVIDIA GPU
+- `-hardware-device nvidia:1`: Use the second NVIDIA GPU
+- `-hardware-device intel:0`: Use the first Intel GPU
 
 ### Transcoding Options
 
-The proxy now uses individual codec settings instead of profiles:
+#### Transcode Modes
+- `copy`: Pass through streams without re-encoding
+- `transcode`: Re-encode streams with specified codecs and quality
 
-#### Video Codecs
-- `copy`: Pass through without re-encoding
-- `h264`: H.264/AVC (supports GPU acceleration)
+#### Video Codecs (when transcoding)
+- `h264`: H.264/AVC (supports GPU acceleration) - default
 - `h265`: H.265/HEVC (supports GPU acceleration)
-- `mpeg2`: MPEG-2 (CPU only, default)
+- `vp9`: VP9 (Intel GPU only)
+- `mpeg2`: MPEG-2 (CPU only)
 
-#### Audio Codecs
-- `copy`: Pass through without re-encoding
-- `aac`: Advanced Audio Coding
+#### Audio Codecs (when transcoding)
+- `aac`: Advanced Audio Coding - default
 - `mp3`: MPEG Layer 3
-- `mp2`: MPEG Layer 2 (default)
+- `mp2`: MPEG Layer 2
+- `opus`: Opus codec
+
+#### Quality Presets
+Instead of specifying bitrates directly, you can use quality presets:
+
+**Video Quality Presets:**
+- `low`: Lower quality, smaller files (2M for H.264/H.265, 4M for MPEG-2)
+- `medium`: Balanced quality and size (4M for H.264/H.265, 6M for MPEG-2) - default
+- `high`: Higher quality, larger files (8M for H.264/H.265, 10M for MPEG-2)
+- `custom`: Use `-custom-video-bitrate` to specify exact bitrate
+
+**Audio Quality Presets:**
+- `low`: Lower quality (128k for AAC/MP3, 192k for MP2)
+- `medium`: Balanced quality (192k for AAC/MP3, 224k for MP2) - default
+- `high`: Higher quality (256k for AAC/MP3, 320k for MP2)
+- `custom`: Use `-custom-audio-bitrate` to specify exact bitrate
 
 #### Examples
 
-**Default (MPEG-2/MP2 - equivalent to old plex-gump profile):**
+**Stream Copy (no transcoding):**
+```bash
+./iptv-proxy -m3u URL -epg URL -base URL \
+  -transcode-mode copy
+```
+
+**Default Quality Transcoding (H.264/AAC with medium quality):**
 ```bash
 ./iptv-proxy -m3u URL -epg URL -base URL
 ```
 
-**H.264/AAC for better compatibility:**
+**High Quality with GPU:**
 ```bash
 ./iptv-proxy -m3u URL -epg URL -base URL \
-  -video-codec h264 -audio-codec aac
+  -video-quality high \
+  -audio-quality high \
+  -hardware-device auto
 ```
 
-**Copy both streams (no transcoding):**
+**Custom Bitrate with Specific GPU:**
 ```bash
 ./iptv-proxy -m3u URL -epg URL -base URL \
-  -video-codec copy -audio-codec copy
+  -video-quality custom \
+  -custom-video-bitrate 10M \
+  -hardware-device nvidia:0
 ```
 
-**GPU-accelerated H.264:**
+**CPU-only MPEG-2 Encoding:**
 ```bash
 ./iptv-proxy -m3u URL -epg URL -base URL \
-  -video-codec h264 -hardware-accel nvidia
+  -video-codec mpeg2 \
+  -hardware-device none
 ```
 
-Note: GPU acceleration only works with h264 and h265 codecs.
+Note: GPU acceleration only works with h264, h265, and vp9 (Intel only) codecs.
+
+### Codec Compatibility
+
+The proxy automatically validates codec compatibility with selected hardware:
+
+| Hardware | Supported Codecs |
+|----------|------------------|
+| CPU | All codecs (h264, h265, vp9, mpeg2) |
+| NVIDIA | h264, h265 |
+| Intel | h264, h265, vp9 (if supported) |
+| AMD | h264, h265 |
+
+If you select an incompatible codec/hardware combination, the proxy will report an error at startup.
 
 ## Test Channels
 
@@ -239,12 +334,15 @@ The proxy emulates an HDHomeRun device, making it compatible with:
 - Run the included `plex_test_debug.sh` script
 
 ### GPU Transcoding Not Working
+- Check if GPUs are detected at startup (should list available devices)
 - Verify GPU drivers are installed
 - Check `nvidia-smi` (NVIDIA) or `/dev/dri` (Intel/AMD)
-- Use `-hardware-accel none` to force CPU encoding
-- Ensure you're using h264 or h265 codecs (GPU doesn't support mpeg2)
+- Use `-hardware-device none` to force CPU encoding
+- Ensure you're using h264, h265, or vp9 codecs (GPU doesn't support mpeg2)
+- Try selecting a specific GPU with `-hardware-device nvidia:0` or `-hardware-device intel:0`
 
 ### High CPU Usage
-- Enable GPU transcoding with `-hardware-accel auto` and `-video-codec h264`
-- Use `-video-codec copy -audio-codec copy` to disable transcoding
+- Enable GPU transcoding with `-hardware-device auto`
+- Use `-transcode-mode copy` to disable transcoding entirely
+- Lower quality presets with `-video-quality low -audio-quality low`
 - Reduce concurrent streams or buffer size

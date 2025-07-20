@@ -19,6 +19,30 @@ const (
 	HardwareAMD HardwareType = "amd"
 )
 
+// QualityPreset defines the quality level for transcoding.
+type QualityPreset string
+
+const (
+	// QualityLow uses lower bitrates for smaller files.
+	QualityLow QualityPreset = "low"
+	// QualityMedium uses balanced bitrates for good quality and file size.
+	QualityMedium QualityPreset = "medium"
+	// QualityHigh uses higher bitrates for best quality.
+	QualityHigh QualityPreset = "high"
+	// QualityCustom allows manual bitrate specification.
+	QualityCustom QualityPreset = "custom"
+)
+
+// TranscodeMode defines whether to copy streams or transcode them.
+type TranscodeMode string
+
+const (
+	// TranscodeModeCopy copies streams without re-encoding.
+	TranscodeModeCopy TranscodeMode = "copy"
+	// TranscodeModeTranscode re-encodes streams with specified settings.
+	TranscodeModeTranscode TranscodeMode = "transcode"
+)
+
 // TranscodingProfile defines the parameters for a transcoding operation.
 type TranscodingProfile struct {
 	Name          string
@@ -35,6 +59,8 @@ type TranscodingProfile struct {
 type HardwareInfo struct {
 	Type         HardwareType
 	DevicePath   string
+	DeviceID     int    // Device index for multi-GPU systems
+	DeviceName   string // Human-readable device name
 	Capabilities []string
 	Available    bool
 }

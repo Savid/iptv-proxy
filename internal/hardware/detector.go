@@ -49,6 +49,8 @@ func (d *Detector) DetectGPUs() []types.HardwareInfo {
 	gpus = append(gpus, types.HardwareInfo{
 		Type:         types.HardwareCPU,
 		DevicePath:   "",
+		DeviceID:     0,
+		DeviceName:   "CPU (Software Encoding)",
 		Capabilities: []string{codecH264, codecH265, "vp8", "vp9"},
 		Available:    true,
 	})
@@ -69,6 +71,35 @@ func (d *Detector) DetectGPUs() []types.HardwareInfo {
 	}
 
 	return gpus
+}
+
+// DetectAllDevices scans the system for all available GPU hardware devices.
+func (d *Detector) DetectAllDevices() ([]types.HardwareInfo, error) {
+	var devices []types.HardwareInfo
+
+	// Always add CPU as a fallback option
+	devices = append(devices, types.HardwareInfo{
+		Type:         types.HardwareCPU,
+		DevicePath:   "",
+		DeviceID:     0,
+		DeviceName:   "CPU (Software Encoding)",
+		Capabilities: []string{codecH264, codecH265, "vp8", "vp9", "mpeg2"},
+		Available:    true,
+	})
+
+	// Check for all NVIDIA GPUs
+	nvidiaGPUs := d.CheckAllNVIDIA()
+	devices = append(devices, nvidiaGPUs...)
+
+	// Check for all Intel GPUs
+	intelGPUs := d.CheckAllIntel()
+	devices = append(devices, intelGPUs...)
+
+	// Check for all AMD GPUs
+	amdGPUs := d.CheckAllAMD()
+	devices = append(devices, amdGPUs...)
+
+	return devices, nil
 }
 
 // CheckNVIDIA detects NVIDIA GPU availability using nvidia-smi.
@@ -109,9 +140,69 @@ func (d *Detector) CheckNVIDIA() (*types.HardwareInfo, error) {
 	return &types.HardwareInfo{
 		Type:         types.HardwareNVIDIA,
 		DevicePath:   parts[1], // GPU UUID
+		DeviceID:     0,
+		DeviceName:   parts[0],
 		Capabilities: capabilities,
 		Available:    true,
 	}, nil
+}
+
+// CheckAllNVIDIA detects all NVIDIA GPUs using nvidia-smi.
+func (d *Detector) CheckAllNVIDIA() []types.HardwareInfo {
+	var gpus []types.HardwareInfo
+
+	// Check if nvidia-smi exists
+	cmd := exec.Command("nvidia-smi", "--query-gpu=index,name,uuid", "--format=csv,noheader")
+	output, err := cmd.Output()
+	if err != nil {
+		return gpus
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		parts := strings.Split(line, ", ")
+		if len(parts) < 3 {
+			continue
+		}
+
+		// Parse GPU index
+		var gpuIndex int
+		if _, err := fmt.Sscanf(parts[0], "%d", &gpuIndex); err != nil {
+			continue
+		}
+
+		gpuName := parts[1]
+		gpuUUID := parts[2]
+
+		d.logger.Printf("Detected NVIDIA GPU %d: %s", gpuIndex, gpuName)
+
+		// Test NVENC availability for this specific GPU
+		capabilities := []string{}
+		hwInfo := types.HardwareInfo{Type: types.HardwareNVIDIA, DeviceID: gpuIndex}
+		if d.TestHardwareCodec(hwInfo, "h264_nvenc") {
+			capabilities = append(capabilities, codecH264)
+		}
+		if d.TestHardwareCodec(hwInfo, "hevc_nvenc") {
+			capabilities = append(capabilities, codecH265)
+		}
+
+		if len(capabilities) > 0 {
+			gpus = append(gpus, types.HardwareInfo{
+				Type:         types.HardwareNVIDIA,
+				DevicePath:   gpuUUID,
+				DeviceID:     gpuIndex,
+				DeviceName:   gpuName,
+				Capabilities: capabilities,
+				Available:    true,
+			})
+		}
+	}
+
+	return gpus
 }
 
 // CheckIntel detects Intel GPU availability through VA-API.
@@ -131,6 +222,30 @@ func (d *Detector) CheckIntel() (*types.HardwareInfo, error) {
 	}
 
 	return nil, ErrNoIntelGPU
+}
+
+// CheckAllIntel detects all Intel GPUs through VA-API.
+func (d *Detector) CheckAllIntel() []types.HardwareInfo {
+	var gpus []types.HardwareInfo
+
+	// Check for Intel GPU render nodes
+	renderNodes, err := filepath.Glob("/dev/dri/renderD*")
+	if err != nil || len(renderNodes) == 0 {
+		return gpus
+	}
+
+	deviceID := 0
+	// Check each render node
+	for _, node := range renderNodes {
+		hwInfo := d.checkIntelNode(node)
+		if hwInfo != nil {
+			hwInfo.DeviceID = deviceID
+			gpus = append(gpus, *hwInfo)
+			deviceID++
+		}
+	}
+
+	return gpus
 }
 
 // checkIntelNode checks if a specific node is an Intel GPU.
@@ -153,9 +268,19 @@ func (d *Detector) checkIntelNode(node string) *types.HardwareInfo {
 		return nil
 	}
 
+	// Extract device name from vainfo output
+	deviceName := "Intel GPU"
+	if strings.Contains(outputStr, "iHD") {
+		deviceName = "Intel GPU (iHD driver)"
+	} else if strings.Contains(outputStr, "i965") {
+		deviceName = "Intel GPU (i965 driver)"
+	}
+
 	return &types.HardwareInfo{
 		Type:         types.HardwareIntel,
 		DevicePath:   node,
+		DeviceID:     0, // Will be set by caller
+		DeviceName:   deviceName,
 		Capabilities: capabilities,
 		Available:    true,
 	}
@@ -209,12 +334,47 @@ func (d *Detector) CheckAMD() (*types.HardwareInfo, error) {
 		return &types.HardwareInfo{
 			Type:         types.HardwareAMD,
 			DevicePath:   "",
+			DeviceID:     0,
+			DeviceName:   "AMD GPU (AMF)",
 			Capabilities: []string{codecH264, codecH265},
 			Available:    true,
 		}, nil
 	}
 
 	return nil, ErrNoAMDGPU
+}
+
+// CheckAllAMD detects all AMD GPUs through VA-API or AMF.
+func (d *Detector) CheckAllAMD() []types.HardwareInfo {
+	var gpus []types.HardwareInfo
+
+	// Check for AMD GPU render nodes on Linux
+	renderNodes, err := filepath.Glob("/dev/dri/renderD*")
+	if err == nil && len(renderNodes) > 0 {
+		deviceID := 0
+		for _, node := range renderNodes {
+			hwInfo := d.checkAMDNode(node)
+			if hwInfo != nil {
+				hwInfo.DeviceID = deviceID
+				gpus = append(gpus, *hwInfo)
+				deviceID++
+			}
+		}
+	}
+
+	// Check for AMD AMF on Windows
+	if len(gpus) == 0 && d.isWindowsAMFAvailable() {
+		gpus = append(gpus, types.HardwareInfo{
+			Type:         types.HardwareAMD,
+			DevicePath:   "",
+			DeviceID:     0,
+			DeviceName:   "AMD GPU (AMF)",
+			Capabilities: []string{codecH264, codecH265},
+			Available:    true,
+		})
+	}
+
+	return gpus
 }
 
 // checkAMDNode checks if a specific node is an AMD GPU.
@@ -237,9 +397,17 @@ func (d *Detector) checkAMDNode(node string) *types.HardwareInfo {
 		return nil
 	}
 
+	// Extract device name from vainfo output
+	deviceName := "AMD GPU"
+	if strings.Contains(outputStr, "radeonsi") {
+		deviceName = "AMD GPU (RadeonSI)"
+	}
+
 	return &types.HardwareInfo{
 		Type:         types.HardwareAMD,
 		DevicePath:   node,
+		DeviceID:     0, // Will be set by caller
+		DeviceName:   deviceName,
 		Capabilities: capabilities,
 		Available:    true,
 	}

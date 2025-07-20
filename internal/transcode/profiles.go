@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/internal/types"
 )
 
@@ -107,6 +108,68 @@ func CreateProfile(videoCodec, audioCodec, videoBitrate, audioBitrate string) ty
 		)
 	case codecCopy:
 		extraArgs = append(extraArgs, "-c:a", "copy")
+	}
+
+	profile.ExtraArgs = extraArgs
+	return profile
+}
+
+// getProfileVideoBitrate returns the video bitrate based on quality settings.
+func getProfileVideoBitrate(cfg *config.Config, mapper *QualityMapper) string {
+	if cfg.VideoQuality == "custom" {
+		return cfg.CustomVideoBitrate
+	}
+	return mapper.GetVideoBitrate(cfg.VideoQuality, cfg.VideoCodec)
+}
+
+// getProfileAudioBitrate returns the audio bitrate based on quality settings.
+func getProfileAudioBitrate(cfg *config.Config, mapper *QualityMapper) string {
+	if cfg.AudioQuality == "custom" {
+		return cfg.CustomAudioBitrate
+	}
+	return mapper.GetAudioBitrate(cfg.AudioQuality, cfg.AudioCodec)
+}
+
+// NewTranscodingProfile creates a transcoding profile from the new config structure.
+func NewTranscodingProfile(cfg *config.Config, mapper *QualityMapper) *types.TranscodingProfile {
+	profile := &types.TranscodingProfile{
+		Name:      "stream",
+		Container: "mpegts",
+		ExtraArgs: []string{},
+	}
+
+	// Handle transcode mode
+	if cfg.TranscodeMode == "copy" {
+		// Copy mode - just copy streams
+		profile.VideoCodec = codecCopy
+		profile.AudioCodec = codecCopy
+		profile.VideoBitrate = ""
+		profile.AudioBitrate = ""
+	} else {
+		// Transcode mode - use specified codecs and quality settings
+		profile.VideoCodec = cfg.VideoCodec
+		profile.AudioCodec = cfg.AudioCodec
+		profile.VideoBitrate = getProfileVideoBitrate(cfg, mapper)
+		profile.AudioBitrate = getProfileAudioBitrate(cfg, mapper)
+	}
+
+	// Common FFmpeg arguments for streaming
+	// NOTE: We don't add codec arguments here because the hardware selector
+	// will add the appropriate codec arguments based on hardware capabilities
+	extraArgs := []string{
+		"-err_detect", "ignore_err",
+		"-fflags", "+genpts+discardcorrupt+nobuffer",
+		"-analyzeduration", "10M",
+		"-probesize", "10M",
+		"-max_delay", "5000000",
+		"-reconnect", "1",
+		"-reconnect_at_eof", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "5",
+		"-f", "mpegts",
+		"-mpegts_copyts", "1",
+		"-avoid_negative_ts", "disabled",
+		"-max_muxing_queue_size", "1024",
 	}
 
 	profile.ExtraArgs = extraArgs
