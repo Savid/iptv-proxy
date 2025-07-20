@@ -128,7 +128,8 @@ func (t *FFmpegTranscoder) buildCommand() []string {
 
 	// Input options
 	args = append(args,
-		"-fflags", "+genpts",
+		"-fflags", "+genpts+discardcorrupt+nobuffer",
+		"-err_detect", "ignore_err",
 		"-i", t.inputURL,
 	)
 
