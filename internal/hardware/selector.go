@@ -30,6 +30,8 @@ var (
 	ErrNoHardware = errors.New("no hardware acceleration available")
 	// ErrNoSuitableHardware is returned when no suitable hardware found.
 	ErrNoSuitableHardware = errors.New("no suitable hardware found")
+	// ErrDeviceNotFound is returned when specified device is not found.
+	ErrDeviceNotFound = errors.New("specified device not found")
 )
 
 // Selector chooses the best available hardware for transcoding.
@@ -66,15 +68,30 @@ func (s *Selector) Initialize() error {
 }
 
 // SelectHardware chooses the best hardware for the given profile.
-func (s *Selector) SelectHardware(_ string) (types.HardwareInfo, error) {
+func (s *Selector) SelectHardware(deviceType string, deviceID int) (types.HardwareInfo, error) {
 	if len(s.availableGPUs) == 0 {
 		return types.HardwareInfo{}, ErrNoHardware
 	}
 
-	// plex-gump uses MPEG-2 which requires CPU encoding
-	for _, gpu := range s.availableGPUs {
-		if gpu.Type == types.HardwareCPU {
-			return gpu, nil
+	// Handle specific device selection (e.g., nvidia:0)
+	if deviceType != "auto" && deviceType != "none" && deviceType != "" {
+		for _, gpu := range s.availableGPUs {
+			if string(gpu.Type) == deviceType && gpu.DeviceID == deviceID && gpu.Available {
+				s.logger.Printf("Selected specific device: %s:%d", gpu.Type, gpu.DeviceID)
+				return gpu, nil
+			}
+		}
+		// If specific device not found, log error and return
+		s.logger.Printf("Device %s:%d not found", deviceType, deviceID)
+		return types.HardwareInfo{}, ErrDeviceNotFound
+	}
+
+	// Handle "none" - force CPU encoding
+	if deviceType == "none" {
+		for _, gpu := range s.availableGPUs {
+			if gpu.Type == types.HardwareCPU {
+				return gpu, nil
+			}
 		}
 	}
 
@@ -145,7 +162,7 @@ func (s *Selector) getVideoCodecArgs(hw types.HardwareInfo, videoCodec string) [
 
 	switch hw.Type {
 	case types.HardwareNVIDIA:
-		return s.getNVIDIAVideoArgs(videoCodec)
+		return s.getNVIDIAVideoArgs(hw, videoCodec)
 	case types.HardwareIntel:
 		return s.getIntelVideoArgs(hw, videoCodec)
 	case types.HardwareAMD:
@@ -158,8 +175,14 @@ func (s *Selector) getVideoCodecArgs(hw types.HardwareInfo, videoCodec string) [
 }
 
 // getNVIDIAVideoArgs returns NVIDIA specific video encoding arguments.
-func (s *Selector) getNVIDIAVideoArgs(videoCodec string) []string {
+func (s *Selector) getNVIDIAVideoArgs(hw types.HardwareInfo, videoCodec string) []string {
 	args := []string{}
+
+	// Add GPU index if specified (for multi-GPU systems)
+	if hw.DeviceID >= 0 {
+		args = append(args, "-gpu", fmt.Sprintf("%d", hw.DeviceID))
+	}
+
 	switch videoCodec {
 	case codecH264:
 		args = append(args, "-c:v", "h264_nvenc")

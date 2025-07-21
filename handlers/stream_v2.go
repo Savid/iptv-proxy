@@ -10,7 +10,14 @@ import (
 
 	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/internal/proxy"
+	"github.com/savid/iptv-proxy/internal/transcode"
 	"github.com/savid/iptv-proxy/internal/utils"
+)
+
+const (
+	codecCopy = "copy"
+	modeAuto  = "auto"
+	modeNone  = "none"
 )
 
 // StreamV2Handler handles streaming requests with transcoding support.
@@ -19,15 +26,57 @@ type StreamV2Handler struct {
 	logger     *log.Logger
 }
 
+// getVideoBitrate returns the video bitrate based on quality settings.
+func getVideoBitrate(cfg *config.Config, mapper *transcode.QualityMapper) string {
+	if cfg.VideoQuality == "custom" {
+		return cfg.CustomVideoBitrate
+	}
+	return mapper.GetVideoBitrate(cfg.VideoQuality, cfg.VideoCodec)
+}
+
+// getAudioBitrate returns the audio bitrate based on quality settings.
+func getAudioBitrate(cfg *config.Config, mapper *transcode.QualityMapper) string {
+	if cfg.AudioQuality == "custom" {
+		return cfg.CustomAudioBitrate
+	}
+	return mapper.GetAudioBitrate(cfg.AudioQuality, cfg.AudioCodec)
+}
+
 // NewStreamV2Handler creates a new stream handler with transcoding support.
 func NewStreamV2Handler(cfg *config.Config, logger *log.Logger) (*StreamV2Handler, error) {
+	// Create quality mapper
+	qualityMapper := transcode.NewQualityMapper()
+
+	// Determine video and audio codecs based on transcode mode
+	videoCodec := cfg.VideoCodec
+	audioCodec := cfg.AudioCodec
+	videoBitrate := ""
+	audioBitrate := ""
+
+	if cfg.TranscodeMode == codecCopy {
+		videoCodec = codecCopy
+		audioCodec = codecCopy
+	} else {
+		videoBitrate = getVideoBitrate(cfg, qualityMapper)
+		audioBitrate = getAudioBitrate(cfg, qualityMapper)
+	}
+
+	// Parse hardware device
+	hardwareAccel := modeAuto
+	if cfg.HardwareDevice == modeNone {
+		hardwareAccel = modeNone
+	} else if cfg.HardwareDevice != modeAuto {
+		// For specific devices, still use auto and let the selector handle it
+		hardwareAccel = modeAuto
+	}
+
 	// Create transcoder configuration
 	transcoderConfig := &proxy.TranscoderConfig{
-		VideoCodec:          cfg.VideoCodec,
-		AudioCodec:          cfg.AudioCodec,
-		VideoBitrate:        cfg.VideoBitrate,
-		AudioBitrate:        cfg.AudioBitrate,
-		HardwareAccel:       cfg.HardwareAccel,
+		VideoCodec:          videoCodec,
+		AudioCodec:          audioCodec,
+		VideoBitrate:        videoBitrate,
+		AudioBitrate:        audioBitrate,
+		HardwareAccel:       hardwareAccel,
 		BufferSize:          cfg.BufferSize * 1024 * 1024, // Convert MB to bytes
 		BufferPrefetchRatio: cfg.BufferPrefetchRatio,
 		MinThreshold:        64 * 1024, // 64KB

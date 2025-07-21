@@ -15,6 +15,7 @@ import (
 	"github.com/savid/iptv-proxy/config"
 	"github.com/savid/iptv-proxy/handlers"
 	"github.com/savid/iptv-proxy/internal/data"
+	"github.com/savid/iptv-proxy/internal/hardware"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,6 +39,24 @@ func main() {
 	logrus.SetLevel(level)
 
 	logger := logrus.StandardLogger()
+
+	// List available hardware devices
+	if cfg.TranscodeMode == "transcode" {
+		stdLogger := log.New(logger.Writer(), "", 0)
+		detector := hardware.NewDetector(stdLogger)
+		devices, err := detector.DetectAllDevices()
+		if err == nil && len(devices) > 0 {
+			logger.Info("Available hardware devices:")
+			for _, dev := range devices {
+				logger.WithFields(logrus.Fields{
+					"type":         dev.Type,
+					"id":           dev.DeviceID,
+					"name":         dev.DeviceName,
+					"capabilities": dev.Capabilities,
+				}).Info("  Device")
+			}
+		}
+	}
 
 	// Create store and fetcher
 	store := data.NewStore()
@@ -116,8 +135,8 @@ func setupRoutes(mux *http.ServeMux, cfg *config.Config, store *data.Store, logg
 	m3uHandler := handlers.NewM3UHandler(store, cfg, logger)
 	epgHandler := handlers.NewEPGHandler(store, cfg, logger)
 
-	// Use transcoding handler when video or audio codec is not "copy"
-	if cfg.VideoCodec != "copy" || cfg.AudioCodec != "copy" {
+	// Use transcoding handler when transcode mode is not "copy"
+	if cfg.TranscodeMode != "copy" {
 		// Create a standard logger wrapper for logrus
 		stdLogger := log.New(logger.Writer(), "", 0)
 		streamHandler, err := handlers.NewStreamV2Handler(cfg, stdLogger)

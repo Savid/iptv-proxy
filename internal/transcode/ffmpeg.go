@@ -111,64 +111,58 @@ func (t *FFmpegTranscoder) Start(ctx context.Context) error {
 	return nil
 }
 
+// commandSection represents different sections of FFmpeg command.
+type commandSection struct {
+	global  []string
+	input   []string
+	filters []string
+	video   []string
+	audio   []string
+	output  []string
+}
+
 // buildCommand constructs the FFmpeg command arguments.
 func (t *FFmpegTranscoder) buildCommand() []string {
-	args := []string{
-		"-hide_banner",
-		"-loglevel", "warning",
-		"-stats",
+	sections := &commandSection{
+		global: []string{
+			"-hide_banner",
+			"-loglevel", "warning",
+			"-stats",
+		},
+		input:   []string{},
+		filters: []string{},
+		video:   []string{},
+		audio:   []string{},
+		output:  []string{},
 	}
 
-	// Add hardware-specific arguments at the beginning
+	// Get hardware-specific arguments
 	hardwareArgs := t.selector.GetFFmpegArgs(t.hardware, t.profile)
 
-	// Extract codec and device arguments from hardware args
-	var codecArgs []string
-	var deviceArgs []string
-	for i := 0; i < len(hardwareArgs); i++ {
-		switch hardwareArgs[i] {
-		case "-c:v", "-c:a":
-			if i+1 < len(hardwareArgs) {
-				codecArgs = append(codecArgs, hardwareArgs[i], hardwareArgs[i+1])
-				i++
-			}
-		case "-vaapi_device", "-init_hw_device", "-filter_hw_device":
-			if i+1 < len(hardwareArgs) {
-				deviceArgs = append(deviceArgs, hardwareArgs[i], hardwareArgs[i+1])
-				i++
-			}
-		default:
-			codecArgs = append(codecArgs, hardwareArgs[i])
-		}
-	}
+	// Parse and categorize hardware arguments
+	t.categorizeHardwareArgs(hardwareArgs, sections)
 
-	// Add device args first
-	args = append(args, deviceArgs...)
-
-	// Input options
-	args = append(args,
+	// Add input options
+	sections.input = append(sections.input,
 		"-fflags", "+genpts+discardcorrupt+nobuffer",
 		"-err_detect", "ignore_err",
 		"-i", t.inputURL,
 	)
 
-	// Add codec arguments if any from hardware
-	if len(codecArgs) > 0 {
-		args = append(args, codecArgs...)
-	}
+	// Add profile's extra arguments, categorizing them appropriately
+	t.categorizeProfileArgs(t.profile.ExtraArgs, sections)
 
-	// Add profile's extra arguments (includes codec settings)
-	args = append(args, t.profile.ExtraArgs...)
+	// Build final command by assembling sections in order
+	args := []string{}
+	args = append(args, sections.global...)
+	args = append(args, sections.input...)
+	args = append(args, sections.filters...)
+	args = append(args, sections.video...)
+	args = append(args, sections.audio...)
+	args = append(args, sections.output...)
 
-	// Output format (if not already specified in ExtraArgs)
-	hasFormat := false
-	for _, arg := range t.profile.ExtraArgs {
-		if arg == "-f" {
-			hasFormat = true
-			break
-		}
-	}
-	if !hasFormat {
+	// Ensure output format is set
+	if !t.hasArg(sections.output, "-f") {
 		args = append(args, "-f", t.profile.Container)
 	}
 
@@ -176,6 +170,112 @@ func (t *FFmpegTranscoder) buildCommand() []string {
 	args = append(args, "pipe:1")
 
 	return args
+}
+
+// categorizeHardwareArgs sorts hardware arguments into appropriate sections.
+func (t *FFmpegTranscoder) categorizeHardwareArgs(args []string, sections *commandSection) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-gpu":
+			// NVIDIA GPU selection - goes in video section with encoder
+			if i+1 < len(args) {
+				sections.video = append(sections.video, args[i], args[i+1])
+				i++
+			}
+		case "-vaapi_device", "-init_hw_device", "-filter_hw_device":
+			// VA-API device setup - goes in global section
+			if i+1 < len(args) {
+				sections.global = append(sections.global, args[i], args[i+1])
+				i++
+			}
+		case "-c:v":
+			// Video codec - goes in video section
+			if i+1 < len(args) {
+				sections.video = append(sections.video, args[i], args[i+1])
+				i++
+			}
+		case "-c:a":
+			// Audio codec - goes in audio section
+			if i+1 < len(args) {
+				sections.audio = append(sections.audio, args[i], args[i+1])
+				i++
+			}
+		case "-b:v":
+			// Video bitrate - goes in video section
+			if i+1 < len(args) {
+				sections.video = append(sections.video, args[i], args[i+1])
+				i++
+			}
+		case "-b:a":
+			// Audio bitrate - goes in audio section
+			if i+1 < len(args) {
+				sections.audio = append(sections.audio, args[i], args[i+1])
+				i++
+			}
+		default:
+			// Other hardware-specific options go to video section
+			sections.video = append(sections.video, args[i])
+		}
+	}
+}
+
+// categorizeProfileArgs sorts profile arguments into appropriate sections.
+func (t *FFmpegTranscoder) categorizeProfileArgs(args []string, sections *commandSection) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-f":
+			// Format - goes in output section
+			if i+1 < len(args) {
+				sections.output = append(sections.output, args[i], args[i+1])
+				i++
+			}
+		case "-c:v":
+			// Skip if already set by hardware args
+			if !t.hasArg(sections.video, "-c:v") && i+1 < len(args) {
+				sections.video = append(sections.video, args[i], args[i+1])
+				i++
+			} else if i+1 < len(args) {
+				i++ // Skip the value too
+			}
+		case "-c:a":
+			// Skip if already set by hardware args
+			if !t.hasArg(sections.audio, "-c:a") && i+1 < len(args) {
+				sections.audio = append(sections.audio, args[i], args[i+1])
+				i++
+			} else if i+1 < len(args) {
+				i++ // Skip the value too
+			}
+		case "-b:v":
+			// Skip if already set by hardware args
+			if !t.hasArg(sections.video, "-b:v") && i+1 < len(args) {
+				sections.video = append(sections.video, args[i], args[i+1])
+				i++
+			} else if i+1 < len(args) {
+				i++ // Skip the value too
+			}
+		case "-b:a":
+			// Skip if already set by hardware args
+			if !t.hasArg(sections.audio, "-b:a") && i+1 < len(args) {
+				sections.audio = append(sections.audio, args[i], args[i+1])
+				i++
+			} else if i+1 < len(args) {
+				i++ // Skip the value too
+			}
+		default:
+			// Other args go to output section
+			sections.output = append(sections.output, args[i])
+		}
+	}
+}
+
+// hasArg checks if an argument exists in a slice.
+func (t *FFmpegTranscoder) hasArg(args []string, arg string) bool {
+	for _, a := range args {
+		if a == arg {
+			return true
+		}
+	}
+	return false
 }
 
 // Write writes data to the transcoder input (for pipe input).
